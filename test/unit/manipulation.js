@@ -2526,3 +2526,98 @@ asyncTest( "Inline event handlers hidden behind self-closing tags are not execut
 		start();
 	}, 2000 );
 });
+
+test( "<option> and <optgroup> markup is not parsed inside a select wrapper (CVE-2020-11023)", function() {
+
+	// Each payload is inert when parsed inside a regular element, which is how an
+	// HTML sanitizer sees it: the <img> only exists as raw text of a <style>.
+	// Parsing the markup inside a "<select multiple='multiple'>" wrapper changes
+	// the parsing context and turns the hidden markup into a live element.
+	var payloads = [
+			"<option><style></option></select><div><img class='cve-2020-11023'></div></style>",
+			"<optgroup><style></optgroup></select><div><img class='cve-2020-11023'></div></style>",
+			"<option><select><svg></select><style><div><img class='cve-2020-11023'></div></style>",
+			"<optgroup><select><svg></select><style><div><img class='cve-2020-11023'></div></style>"
+		];
+
+	expect( payloads.length * 6 );
+
+	jQuery.each( payloads, function( i, payload ) {
+		var elems,
+			selector = ".cve-2020-11023",
+			fixture = jQuery("<div></div>").appendTo("#qunit-fixture");
+
+		equal( fixture.html( payload ).find( selector ).length, 0,
+			"html() keeps the hidden markup inert: " + payload );
+
+		equal( fixture.empty().append( payload ).find( selector ).length, 0,
+			"append() keeps the hidden markup inert: " + payload );
+
+		equal( fixture.empty().append("<b></b>").children().before( payload ).end().find( selector ).length, 0,
+			"before() keeps the hidden markup inert: " + payload );
+
+		equal( jQuery("<select></select>").append( payload ).find( selector ).length, 0,
+			"append() to a select keeps the hidden markup inert: " + payload );
+
+		elems = jQuery( payload );
+		equal( elems.filter( selector ).length + elems.find( selector ).length, 0,
+			"jQuery( html ) keeps the hidden markup inert: " + payload );
+
+		elems = jQuery( jQuery.parseHTML( payload ) );
+		equal( elems.filter( selector ).length + elems.find( selector ).length, 0,
+			"jQuery.parseHTML() keeps the hidden markup inert: " + payload );
+	});
+});
+
+test( "<option> and <optgroup> markup keeps working (CVE-2020-11023)", function() {
+	expect( 9 );
+
+	var elems,
+		select = jQuery("<select></select>").appendTo("#qunit-fixture");
+
+	elems = jQuery("<option value='1'>One</option><option value='2'>Two</option>");
+	equal( elems.length, 2, "jQuery( html ) creates both options" );
+	equal( elems[ 0 ].nodeName.toLowerCase(), "option", "jQuery( html ) creates option elements" );
+	ok( !elems[ 0 ].selected, "Created options are not auto-selected" );
+
+	select.append( elems );
+	equal( select.find("option").length, 2, "Options appended to a select" );
+
+	select.html("<option value='a'>A</option><option value='b' selected='selected'>B</option>");
+	equal( select.find("option").length, 2, "html() on a select creates options" );
+	equal( select.val(), "b", "html() on a select keeps the selected option" );
+
+	select.empty().append("<optgroup label='group'><option value='c'>C</option></optgroup>");
+	equal( select.children("optgroup").length, 1, "append() on a select creates an optgroup" );
+	equal( select.find("optgroup > option").length, 1, "The optgroup contains its option" );
+	equal( select.val(), "c", "The option inside the optgroup is selectable" );
+});
+
+asyncTest( "Inline event handlers hidden in <option> markup are not executed (CVE-2020-11023)", function() {
+	expect( 4 );
+
+	var fixture = jQuery("<div></div>").appendTo("#qunit-fixture");
+
+	Globals.register("cve202011023Html");
+	Globals.register("cve202011023Append");
+	Globals.register("cve202011023Create");
+	Globals.register("cve202011023Optgroup");
+
+	window.cve202011023Html = false;
+	window.cve202011023Append = false;
+	window.cve202011023Create = false;
+	window.cve202011023Optgroup = false;
+
+	fixture.html( "<option><select><svg></select><style><img src='x' onerror='cve202011023Html = true'></style>" );
+	fixture.append( "<option><style></option></select><img src='x' onerror='cve202011023Append = true'></style>" );
+	jQuery( "<option><select><svg></select><style><img src='x' onerror='cve202011023Create = true'></style>" );
+	fixture.append( "<optgroup><select><svg></select><style><img src='x' onerror='cve202011023Optgroup = true'></style>" );
+
+	window.setTimeout(function() {
+		strictEqual( window.cve202011023Html, false, "onerror handler hidden in option markup was not executed (html)" );
+		strictEqual( window.cve202011023Append, false, "onerror handler hidden in option markup was not executed (append)" );
+		strictEqual( window.cve202011023Create, false, "onerror handler hidden in option markup was not executed (jQuery( html ))" );
+		strictEqual( window.cve202011023Optgroup, false, "onerror handler hidden in optgroup markup was not executed (append)" );
+		start();
+	}, 2000 );
+});
