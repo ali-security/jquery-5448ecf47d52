@@ -1341,6 +1341,62 @@ test("jQuery.parseHTML", function() {
 	equal( jQuery.parseHTML("<td><td>")[ 1 ].parentNode.nodeType, 11, "parentNode should be documentFragment" );
 });
 
+test("jQuery.parseHTML(<a href>) - gh-2965", function() {
+	expect( 1 );
+
+	var html = "<a href='test.html'></a>",
+		href = jQuery.parseHTML( html )[ 0 ].href;
+
+	ok( /\/test\.html$/.test( href ), "href is not lost after parsing anchor" );
+});
+
+if ( jQuery.support.createHTMLDocument ) {
+	asyncTest("jQuery.parseHTML", function() {
+		expect ( 1 );
+
+		Globals.register("parseHTMLError");
+
+		jQuery.globalEval("parseHTMLError = false;");
+		jQuery.parseHTML( "<img src=x onerror='parseHTMLError = true'>" );
+
+		window.setTimeout(function() {
+			start();
+			equal( window.parseHTMLError, false, "onerror eventhandler has not been called." );
+		}, 2000);
+	});
+
+	asyncTest("jQuery.parseHTML - inline event handlers are not executed without a context", function() {
+		expect( 3 );
+
+		Globals.register("parseHTMLErrorKeepScripts");
+		Globals.register("parseHTMLErrorNullContext");
+		Globals.register("parseHTMLErrorNested");
+
+		jQuery.globalEval( "parseHTMLErrorKeepScripts = false;" +
+			"parseHTMLErrorNullContext = false;" +
+			"parseHTMLErrorNested = false;" );
+
+		// A boolean second argument is keepScripts; the context stays the default one
+		jQuery.parseHTML( "<img src=x onerror='parseHTMLErrorKeepScripts = true'>", true );
+
+		// Falsy context
+		jQuery.parseHTML( "<img src=x onerror='parseHTMLErrorNullContext = true'>", null, false );
+
+		// Handler nested inside other markup
+		jQuery.parseHTML( "<div><p>text</p><img src=x onerror='parseHTMLErrorNested = true'></div>" );
+
+		window.setTimeout(function() {
+			start();
+			equal( window.parseHTMLErrorKeepScripts, false,
+				"onerror eventhandler has not been called (keepScripts)." );
+			equal( window.parseHTMLErrorNullContext, false,
+				"onerror eventhandler has not been called (null context)." );
+			equal( window.parseHTMLErrorNested, false,
+				"onerror eventhandler has not been called (nested markup)." );
+		}, 2000);
+	});
+}
+
 test("jQuery.parseJSON", function() {
 	expect( 20 );
 
